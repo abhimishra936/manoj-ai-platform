@@ -19,7 +19,6 @@ export default function AIChatAstrologer() {
   const [recording, setRecording] = useState(false);
   const [thinkingIndex, setThinkingIndex] = useState(0);
 
-  // NEW
   const [isListening, setIsListening] = useState(false);
   const [liveSpeech, setLiveSpeech] = useState("");
 
@@ -34,7 +33,6 @@ export default function AIChatAstrologer() {
     },
   ]);
 
-  /* ================= AUTO SCROLL ================= */
   useEffect(() => {
     containerRef.current?.scrollTo({
       top: containerRef.current.scrollHeight,
@@ -42,7 +40,6 @@ export default function AIChatAstrologer() {
     });
   }, [messages]);
 
-  /* ================= THINKING TEXT ================= */
   useEffect(() => {
     if (!loading) return;
     const id = setInterval(() => {
@@ -51,27 +48,16 @@ export default function AIChatAstrologer() {
     return () => clearInterval(id);
   }, [loading]);
 
-  /* ================= INDIAN CLEAR VOICE ================= */
+  /* ===== VOICE SPEAK ===== */
   const speak = (text: string) => {
     speechSynthesis.cancel();
-
     const utter = new SpeechSynthesisUtterance(text.slice(0, 350));
-    utter.rate = 0.95;
-    utter.pitch = 1;
     utter.lang = "en-IN";
-
-    const voices = speechSynthesis.getVoices();
-
-    const indianVoice =
-      voices.find((v) => v.lang.includes("en-IN")) ||
-      voices.find((v) => v.name.toLowerCase().includes("india"));
-
-    if (indianVoice) utter.voice = indianVoice;
-
+    utter.rate = 0.95;
     speechSynthesis.speak(utter);
   };
 
-  /* ================= VOICE ================= */
+  /* ===== FIXED VOICE RECORDING ===== */
   const startVoice = () => {
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
@@ -80,14 +66,11 @@ export default function AIChatAstrologer() {
     if (!SpeechRecognition) return alert("Voice not supported");
 
     const recognition = new SpeechRecognition();
-
     recognition.lang = "en-IN";
     recognition.interimResults = true;
     recognition.continuous = true;
 
     recognitionRef.current = recognition;
-
-    let finalTranscript = "";
 
     recognition.onstart = () => {
       setRecording(true);
@@ -97,27 +80,16 @@ export default function AIChatAstrologer() {
     };
 
     recognition.onresult = (event: any) => {
-      let interim = "";
-      let finalText = "";
+      // 🔥 KEY FIX — rebuild transcript every time
+      let transcript = "";
 
-      // FIXED DUPLICATE BUG
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-
-        if (event.results[i].isFinal) {
-          finalText += transcript;
-        } else {
-          interim += transcript;
-        }
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
       }
 
-      finalTranscript += finalText;
-
-      const combined = finalTranscript + interim;
-
-      finalTranscriptRef.current = combined;
-      setLiveSpeech(combined);
-      setInput(combined);
+      finalTranscriptRef.current = transcript;
+      setLiveSpeech(transcript);
+      setInput(transcript);
     };
 
     recognition.onend = () => {
@@ -135,7 +107,7 @@ export default function AIChatAstrologer() {
     recognitionRef.current?.stop();
   };
 
-  /* ================= SEND ================= */
+  /* ===== SEND ===== */
   const sendMessage = async (voiceText?: string) => {
     const text = (voiceText || input).trim();
     if (!text || loading) return;
@@ -195,13 +167,10 @@ export default function AIChatAstrologer() {
     setLoading(false);
   };
 
-  /* ================= UI ================= */
   return (
     <section className="min-h-screen bg-gradient-to-b from-[#050914] to-[#0c1230] text-white flex justify-center px-2 sm:px-4 py-4">
-
       <div className="w-full max-w-3xl flex flex-col h-[95vh] rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl overflow-hidden">
 
-        {/* HEADER */}
         <div className="p-3 border-b border-white/10 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 animate-pulse" />
           <div>
@@ -210,11 +179,10 @@ export default function AIChatAstrologer() {
           </div>
         </div>
 
-        {/* CHAT AREA */}
-        <div ref={containerRef} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
+        <div ref={containerRef} className="flex-1 overflow-y-auto p-3 space-y-3">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role==="user"?"justify-end":"justify-start"}`}>
-              <div className={`px-4 py-2 rounded-2xl max-w-[85%] text-sm sm:text-base whitespace-pre-line ${
+              <div className={`px-4 py-2 rounded-2xl max-w-[85%] whitespace-pre-line ${
                 m.role==="user"
                   ? "bg-gradient-to-r from-indigo-600 to-pink-600"
                   : "bg-white/10"
@@ -230,7 +198,6 @@ export default function AIChatAstrologer() {
             </div>
           )}
 
-          {/* LISTENING INDICATOR */}
           {isListening && (
             <div className="text-pink-300 text-sm animate-pulse">
               🎤 Listening... Speak now
@@ -238,15 +205,13 @@ export default function AIChatAstrologer() {
           )}
         </div>
 
-        {/* INPUT AREA */}
         <div className="p-3 border-t border-white/10 bg-black/30">
           <div className="relative">
-
             <input
               value={input}
               onChange={(e)=>setInput(e.target.value)}
               placeholder="Ask your astrology question..."
-              className="w-full rounded-full bg-white/10 py-3 pl-4 pr-24 text-sm sm:text-base outline-none"
+              className="w-full rounded-full bg-white/10 py-3 pl-4 pr-24 outline-none"
             />
 
             <button
@@ -265,17 +230,14 @@ export default function AIChatAstrologer() {
             >
               ➤
             </button>
-
           </div>
 
-          {/* LIVE SPEECH TEXT */}
           {isListening && liveSpeech && (
             <p className="text-xs text-white/60 mt-2 px-2">
               🗣️ {liveSpeech}
             </p>
           )}
         </div>
-
       </div>
     </section>
   );
