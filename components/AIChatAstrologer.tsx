@@ -19,6 +19,10 @@ export default function AIChatAstrologer() {
   const [recording, setRecording] = useState(false);
   const [thinkingIndex, setThinkingIndex] = useState(0);
 
+  // NEW
+  const [isListening, setIsListening] = useState(false);
+  const [liveSpeech, setLiveSpeech] = useState("");
+
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,14 +58,13 @@ export default function AIChatAstrologer() {
     const utter = new SpeechSynthesisUtterance(text.slice(0, 350));
     utter.rate = 0.95;
     utter.pitch = 1;
-    utter.lang = "en-IN"; // 👈 Indian voice
+    utter.lang = "en-IN";
 
     const voices = speechSynthesis.getVoices();
 
-    // prefer indian / english female voice
     const indianVoice =
-      voices.find(v => v.lang.includes("en-IN")) ||
-      voices.find(v => v.name.toLowerCase().includes("india"));
+      voices.find((v) => v.lang.includes("en-IN")) ||
+      voices.find((v) => v.name.toLowerCase().includes("india"));
 
     if (indianVoice) utter.voice = indianVoice;
 
@@ -77,23 +80,52 @@ export default function AIChatAstrologer() {
     if (!SpeechRecognition) return alert("Voice not supported");
 
     const recognition = new SpeechRecognition();
+
+    recognition.lang = "en-IN";
     recognition.interimResults = true;
     recognition.continuous = true;
 
     recognitionRef.current = recognition;
 
+    let finalTranscript = "";
+
     recognition.onstart = () => {
       setRecording(true);
+      setIsListening(true);
+      setLiveSpeech("");
       finalTranscriptRef.current = "";
     };
 
-    recognition.onresult = (e: any) => {
-      let text = "";
-      for (let i = 0; i < e.results.length; i++) {
-        text += e.results[i][0].transcript;
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      let finalText = "";
+
+      // FIXED DUPLICATE BUG
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+
+        if (event.results[i].isFinal) {
+          finalText += transcript;
+        } else {
+          interim += transcript;
+        }
       }
-      finalTranscriptRef.current = text;
-      setInput(text);
+
+      finalTranscript += finalText;
+
+      const combined = finalTranscript + interim;
+
+      finalTranscriptRef.current = combined;
+      setLiveSpeech(combined);
+      setInput(combined);
+    };
+
+    recognition.onend = () => {
+      setRecording(false);
+      setIsListening(false);
+
+      const text = finalTranscriptRef.current.trim();
+      if (text) sendMessage(text);
     };
 
     recognition.start();
@@ -101,10 +133,6 @@ export default function AIChatAstrologer() {
 
   const stopVoice = () => {
     recognitionRef.current?.stop();
-    setRecording(false);
-
-    const text = finalTranscriptRef.current.trim();
-    if (text) sendMessage(text);
   };
 
   /* ================= SEND ================= */
@@ -115,6 +143,7 @@ export default function AIChatAstrologer() {
     const userMessage: Message = { role: "user", text };
 
     setInput("");
+    setLiveSpeech("");
     setLoading(true);
 
     setMessages((prev) => [...prev, userMessage, { role: "ai", text: "" }]);
@@ -182,19 +211,14 @@ export default function AIChatAstrologer() {
         </div>
 
         {/* CHAT AREA */}
-        <div
-          ref={containerRef}
-          className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3"
-        >
+        <div ref={containerRef} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role==="user"?"justify-end":"justify-start"}`}>
-              <div
-                className={`px-4 py-2 rounded-2xl max-w-[85%] text-sm sm:text-base whitespace-pre-line ${
-                  m.role==="user"
-                    ? "bg-gradient-to-r from-indigo-600 to-pink-600"
-                    : "bg-white/10"
-                }`}
-              >
+              <div className={`px-4 py-2 rounded-2xl max-w-[85%] text-sm sm:text-base whitespace-pre-line ${
+                m.role==="user"
+                  ? "bg-gradient-to-r from-indigo-600 to-pink-600"
+                  : "bg-white/10"
+              }`}>
                 {m.text}
               </div>
             </div>
@@ -205,9 +229,16 @@ export default function AIChatAstrologer() {
               {THINKING_STEPS[thinkingIndex]}
             </div>
           )}
+
+          {/* LISTENING INDICATOR */}
+          {isListening && (
+            <div className="text-pink-300 text-sm animate-pulse">
+              🎤 Listening... Speak now
+            </div>
+          )}
         </div>
 
-        {/* INPUT AREA — CHATGPT STYLE */}
+        {/* INPUT AREA */}
         <div className="p-3 border-t border-white/10 bg-black/30">
           <div className="relative">
 
@@ -218,7 +249,6 @@ export default function AIChatAstrologer() {
               className="w-full rounded-full bg-white/10 py-3 pl-4 pr-24 text-sm sm:text-base outline-none"
             />
 
-            {/* MIC INSIDE INPUT */}
             <button
               onMouseDown={startVoice}
               onMouseUp={stopVoice}
@@ -229,7 +259,6 @@ export default function AIChatAstrologer() {
               🎤
             </button>
 
-            {/* SEND */}
             <button
               onClick={()=>sendMessage()}
               className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-indigo-500"
@@ -238,6 +267,13 @@ export default function AIChatAstrologer() {
             </button>
 
           </div>
+
+          {/* LIVE SPEECH TEXT */}
+          {isListening && liveSpeech && (
+            <p className="text-xs text-white/60 mt-2 px-2">
+              🗣️ {liveSpeech}
+            </p>
+          )}
         </div>
 
       </div>
