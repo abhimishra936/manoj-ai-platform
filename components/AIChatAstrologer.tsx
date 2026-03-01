@@ -7,52 +7,76 @@ type Message = {
   text: string;
 };
 
+const THINKING_STEPS = [
+  "🔮 Reading cosmic energies...",
+  "🪐 Aligning your planets...",
+  "✨ Interpreting destiny patterns...",
+];
+
 export default function AIChatAstrologer() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [thinkingIndex, setThinkingIndex] = useState(0);
 
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef("");
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "ai",
-      text: "🌌 Welcome. I am your AI Astrologer. Ask your question.",
+      text: "🌌 Welcome. I am your AI Astrologer. Ask me anything about your life journey.",
     },
   ]);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  /* AUTO SCROLL */
+  /* ================= AUTO SCROLL ================= */
   useEffect(() => {
-    const el = containerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    containerRef.current?.scrollTo({
+      top: containerRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages]);
 
-  /* ===== SPEAK RESPONSE (SMART LIMIT) ===== */
+  /* ================= THINKING TEXT ================= */
+  useEffect(() => {
+    if (!loading) return;
+    const id = setInterval(() => {
+      setThinkingIndex((p) => (p + 1) % THINKING_STEPS.length);
+    }, 1800);
+    return () => clearInterval(id);
+  }, [loading]);
+
+  /* ================= INDIAN CLEAR VOICE ================= */
   const speak = (text: string) => {
     speechSynthesis.cancel();
-    const shortText = text.slice(0, 400); // avoid long speech
-    const utter = new SpeechSynthesisUtterance(shortText);
-    utter.lang = "en-US";
-    utter.rate = 1;
+
+    const utter = new SpeechSynthesisUtterance(text.slice(0, 350));
+    utter.rate = 0.95;
+    utter.pitch = 1;
+    utter.lang = "en-IN"; // 👈 Indian voice
+
+    const voices = speechSynthesis.getVoices();
+
+    // prefer indian / english female voice
+    const indianVoice =
+      voices.find(v => v.lang.includes("en-IN")) ||
+      voices.find(v => v.name.toLowerCase().includes("india"));
+
+    if (indianVoice) utter.voice = indianVoice;
+
     speechSynthesis.speak(utter);
   };
 
-  /* ===== START VOICE (HOLD TO TALK) ===== */
+  /* ================= VOICE ================= */
   const startVoice = () => {
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
 
-    if (!SpeechRecognition) {
-      alert("Voice not supported");
-      return;
-    }
+    if (!SpeechRecognition) return alert("Voice not supported");
 
     const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
     recognition.interimResults = true;
     recognition.continuous = true;
 
@@ -63,32 +87,27 @@ export default function AIChatAstrologer() {
       finalTranscriptRef.current = "";
     };
 
-    recognition.onresult = (event: any) => {
-      let transcript = "";
-
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
+    recognition.onresult = (e: any) => {
+      let text = "";
+      for (let i = 0; i < e.results.length; i++) {
+        text += e.results[i][0].transcript;
       }
-
-      finalTranscriptRef.current = transcript;
-      setInput(transcript); // LIVE typing
+      finalTranscriptRef.current = text;
+      setInput(text);
     };
 
     recognition.start();
   };
 
-  /* ===== STOP VOICE ===== */
   const stopVoice = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setRecording(false);
+    recognitionRef.current?.stop();
+    setRecording(false);
 
-      const text = finalTranscriptRef.current.trim();
-      if (text) sendMessage(text);
-    }
+    const text = finalTranscriptRef.current.trim();
+    if (text) sendMessage(text);
   };
 
-  /* ===== SEND MESSAGE ===== */
+  /* ================= SEND ================= */
   const sendMessage = async (voiceText?: string) => {
     const text = (voiceText || input).trim();
     if (!text || loading) return;
@@ -98,11 +117,7 @@ export default function AIChatAstrologer() {
     setInput("");
     setLoading(true);
 
-    setMessages((prev) => [
-      ...prev,
-      userMessage,
-      { role: "ai", text: "" },
-    ]);
+    setMessages((prev) => [...prev, userMessage, { role: "ai", text: "" }]);
 
     try {
       const apiMessages = [...messages, userMessage].map((m) => ({
@@ -112,9 +127,7 @@ export default function AIChatAstrologer() {
 
       const res = await fetch("/api/astro-chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: apiMessages }),
       });
 
@@ -123,31 +136,22 @@ export default function AIChatAstrologer() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
-      let fullText = "";
+      let full = "";
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
-        fullText += decoder.decode(value);
+        full += decoder.decode(value);
 
         setMessages((prev) => {
           const copy = [...prev];
-          copy[copy.length - 1] = {
-            role: "ai",
-            text: fullText,
-          };
+          copy[copy.length - 1] = { role: "ai", text: full };
           return copy;
         });
       }
 
-      /* CONSULTATION LOGIC */
-      if (fullText.length > 500) {
-        fullText +=
-          "\n\n🔱 For deeper personalized guidance, you may Book Consultation with Pandit Manoj Kumar Mishra.";
-      }
-
-      speak(fullText);
+      speak(full);
     } catch {
       setMessages((prev) => {
         const copy = [...prev];
@@ -162,84 +166,80 @@ export default function AIChatAstrologer() {
     setLoading(false);
   };
 
+  /* ================= UI ================= */
   return (
-    <section className="py-8 px-2">
-      <div className="max-w-3xl mx-auto">
+    <section className="min-h-screen bg-gradient-to-b from-[#050914] to-[#0c1230] text-white flex justify-center px-2 sm:px-4 py-4">
 
-        <h2 className="text-center text-3xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
-          AI ASTROLOGER
-        </h2>
+      <div className="w-full max-w-3xl flex flex-col h-[95vh] rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl overflow-hidden">
 
-        <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-[#060b1f] to-[#0d1333] backdrop-blur-xl overflow-hidden shadow-2xl">
+        {/* HEADER */}
+        <div className="p-3 border-b border-white/10 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 animate-pulse" />
+          <div>
+            <p className="font-semibold">AI Astrologer</p>
+            <p className="text-xs text-green-300">● Online • Spiritual Guidance</p>
+          </div>
+        </div>
 
-          {/* CHAT AREA */}
-          <div
-            ref={containerRef}
-            className="h-[65vh] overflow-y-auto p-4 space-y-3"
-          >
-            {messages.map((msg, i) => (
+        {/* CHAT AREA */}
+        <div
+          ref={containerRef}
+          className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3"
+        >
+          {messages.map((m, i) => (
+            <div key={i} className={`flex ${m.role==="user"?"justify-end":"justify-start"}`}>
               <div
-                key={i}
-                className={`flex ${
-                  msg.role === "user"
-                    ? "justify-end"
-                    : "justify-start"
+                className={`px-4 py-2 rounded-2xl max-w-[85%] text-sm sm:text-base whitespace-pre-line ${
+                  m.role==="user"
+                    ? "bg-gradient-to-r from-indigo-600 to-pink-600"
+                    : "bg-white/10"
                 }`}
               >
-                <div
-                  className={`max-w-[80%] px-4 py-2 rounded-xl whitespace-pre-line ${
-                    msg.role === "user"
-                      ? "bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white"
-                      : "bg-white/10 text-white"
-                  }`}
-                >
-                  {msg.text}
-                </div>
+                {m.text}
               </div>
-            ))}
+            </div>
+          ))}
 
-            {/* ASTRO LOADING */}
-            {loading && (
-              <div className="text-purple-300 text-sm animate-pulse">
-                🪐 Aligning planetary energies... Reading your stars...
-              </div>
-            )}
-          </div>
+          {loading && (
+            <div className="text-purple-300 text-sm animate-pulse">
+              {THINKING_STEPS[thinkingIndex]}
+            </div>
+          )}
+        </div>
 
-          {/* INPUT BAR */}
-          <div className="p-3 bg-black/40 border-t border-white/10 flex gap-2">
+        {/* INPUT AREA — CHATGPT STYLE */}
+        <div className="p-3 border-t border-white/10 bg-black/30">
+          <div className="relative">
 
             <input
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              className="flex-1 rounded-xl bg-white/10 text-white p-2 outline-none"
-              placeholder="Ask astrology question..."
+              onChange={(e)=>setInput(e.target.value)}
+              placeholder="Ask your astrology question..."
+              className="w-full rounded-full bg-white/10 py-3 pl-4 pr-24 text-sm sm:text-base outline-none"
             />
 
-            {/* HOLD TO TALK MIC */}
+            {/* MIC INSIDE INPUT */}
             <button
               onMouseDown={startVoice}
               onMouseUp={stopVoice}
-              onTouchStart={startVoice}
-              onTouchEnd={stopVoice}
-              className={`w-11 h-11 rounded-full text-white transition ${
-                recording
-                  ? "bg-red-500 animate-pulse"
-                  : "bg-pink-600"
+              className={`absolute right-14 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full ${
+                recording ? "bg-red-500 animate-pulse" : "bg-pink-600"
               }`}
             >
               🎤
             </button>
 
+            {/* SEND */}
             <button
-              onClick={() => sendMessage()}
-              className="px-4 rounded-xl bg-indigo-500 text-white"
+              onClick={()=>sendMessage()}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-indigo-500"
             >
-              Send
+              ➤
             </button>
 
           </div>
         </div>
+
       </div>
     </section>
   );
