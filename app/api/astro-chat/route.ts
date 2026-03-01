@@ -2,45 +2,39 @@ import OpenAI from "openai";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const messages = body?.messages || [];
-
-    if (!Array.isArray(messages)) {
-      return new Response("Invalid messages", { status: 400 });
-    }
+    const { messages } = await req.json();
 
     const openai = new OpenAI({
       apiKey: process.env.GROQ_API_KEY,
       baseURL: "https://api.groq.com/openai/v1",
     });
 
-    /* ===== GOD MODE SYSTEM PROMPT ===== */
     const stream = await openai.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       stream: true,
-      temperature: 0.65,
+      temperature: 0.6,
 
       messages: [
         {
           role: "system",
           content: `
-You are GOD MODE AI ASTROLOGER.
+You are a HIGH LEVEL VEDIC ASTROLOGER.
 
-PERSONALITY:
-- Calm, wise, mystical, premium.
-- Speak like a high-end spiritual advisor.
+RULES:
 
-RESPONSE RULES:
-- MAX 4–5 lines.
-- Highly relevant answers only.
-- No long paragraphs.
-- No unnecessary explanation.
-- Give direct cosmic guidance.
+- Speak like a premium spiritual expert.
+- Be calm, precise, intelligent.
+- Maximum 5–6 lines.
+- Give practical astrology guidance.
+- Avoid unnecessary long explanation.
 
-BEHAVIOR:
-- Keep conversation flowing naturally.
-- Sometimes ask ONE short follow-up question.
-- Feel intelligent, elegant, premium.
+IMPORTANT:
+If user seems confused, unhappy, or asks repeatedly,
+suggest:
+
+"For deeper personalised guidance, you may Book Consultation with Pandit Manoj Kumar Mishra."
+
+Always sound premium and respectful.
           `,
         },
         ...messages,
@@ -51,30 +45,24 @@ BEHAVIOR:
 
     const readable = new ReadableStream({
       async start(controller) {
-        try {
-          for await (const chunk of stream) {
-            const text =
-              chunk.choices?.[0]?.delta?.content ?? "";
+        for await (const chunk of stream) {
+          const text =
+            chunk.choices?.[0]?.delta?.content || "";
 
-            if (text) {
-              controller.enqueue(encoder.encode(text));
-            }
-          }
-        } finally {
-          controller.close();
+          controller.enqueue(encoder.encode(text));
         }
+
+        controller.close();
       },
     });
 
     return new Response(readable, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
       },
     });
-  } catch (err) {
-    console.error("GOD MODE ERROR:", err);
-    return new Response("AI Error", { status: 500 });
+  } catch (e) {
+    console.error("AI ERROR:", e);
+    return new Response("Error", { status: 500 });
   }
 }

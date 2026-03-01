@@ -10,42 +10,75 @@ type Message = {
 export default function AIChatAstrologer() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [recording, setRecording] = useState(false);
 
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "ai",
-      text: "🌌 Welcome. I am your GOD MODE AI Astrologer. Ask me anything.",
+      text: "🌌 Welcome. I am your AI Astrologer. Ask your question.",
     },
   ]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  /* ===== AUTO SCROLL ===== */
+  /* AUTO SCROLL */
   useEffect(() => {
     const el = containerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
-  /* ===== TEXTAREA AUTO RESIZE ===== */
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 140) + "px";
-  }, [input]);
+  /* ===== SPEAK RESPONSE ===== */
+  const speak = (text: string) => {
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "en-US";
+    utter.rate = 1;
+    speechSynthesis.speak(utter);
+  };
 
-  /* ===== SEND MESSAGE ===== */
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+  /* ===== LIVE VOICE INPUT (WHATSAPP STYLE) ===== */
+  const startVoice = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
 
-    const text = input.trim();
+    if (!SpeechRecognition) return alert("Voice not supported");
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+
+    recognition.onstart = () => setRecording(true);
+
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+
+      // LIVE typing effect
+      setInput(transcript);
+    };
+
+    recognition.onend = () => {
+      setRecording(false);
+      sendMessage(input);
+    };
+
+    recognition.start();
+  };
+
+  /* ===== SEND ===== */
+  const sendMessage = async (voiceText?: string) => {
+    const text = (voiceText || input).trim();
+    if (!text || loading) return;
+
     const userMessage: Message = { role: "user", text };
 
     setInput("");
     setLoading(true);
 
-    // add user + AI placeholder ONCE (VERY IMPORTANT)
     setMessages((prev) => [
       ...prev,
       userMessage,
@@ -66,7 +99,7 @@ export default function AIChatAstrologer() {
         body: JSON.stringify({ messages: apiMessages }),
       });
 
-      if (!res.body) throw new Error("No stream");
+      if (!res.body) throw new Error();
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -79,7 +112,6 @@ export default function AIChatAstrologer() {
 
         fullText += decoder.decode(value);
 
-        // smooth streaming update
         setMessages((prev) => {
           const copy = [...prev];
           copy[copy.length - 1] = {
@@ -89,14 +121,15 @@ export default function AIChatAstrologer() {
           return copy;
         });
       }
-    } catch (err) {
-      console.error("AI ERROR:", err);
 
+      // AUTO AUDIO REPLY
+      speak(fullText);
+    } catch {
       setMessages((prev) => {
         const copy = [...prev];
         copy[copy.length - 1] = {
           role: "ai",
-          text: "⚠️ Cosmic energy interrupted. Try again.",
+          text: "⚠️ Cosmic connection interrupted.",
         };
         return copy;
       });
@@ -106,44 +139,18 @@ export default function AIChatAstrologer() {
   };
 
   return (
-    <section className="relative py-6 md:py-14 px-2 sm:px-4">
-      <div className="w-full max-w-3xl mx-auto">
+    <section className="py-8 px-2">
+      <div className="max-w-3xl mx-auto">
 
-        {/* TITLE */}
-        <h2 className="
-          text-center
-          text-2xl sm:text-3xl md:text-4xl
-          font-bold
-          mb-4 md:mb-6
-          bg-clip-text text-transparent
-          bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400
-        ">
-          GOD MODE AI ASTROLOGER
+        <h2 className="text-center text-3xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
+          AI ASTROLOGER
         </h2>
 
-        {/* CHAT CONTAINER */}
-        <div className="
-          rounded-2xl md:rounded-3xl
-          border border-white/10
-          backdrop-blur-2xl
-          bg-gradient-to-b
-          from-[#0b1022]/95
-          via-[#121830]/95
-          to-[#0a0f20]/95
-          shadow-[0_25px_80px_rgba(0,0,0,0.6)]
-          overflow-hidden
-        ">
+        <div className="rounded-3xl border border-white/10 bg-[#0b1022] overflow-hidden shadow-2xl">
 
-          {/* MESSAGES */}
           <div
             ref={containerRef}
-            className="
-              h-[60vh] md:h-[520px]
-              overflow-y-auto
-              no-scrollbar
-              p-3 sm:p-4 md:p-5
-              space-y-3 md:space-y-4
-            "
+            className="h-[65vh] overflow-y-auto p-4 space-y-3"
           >
             {messages.map((msg, i) => (
               <div
@@ -155,83 +162,49 @@ export default function AIChatAstrologer() {
                 }`}
               >
                 <div
-                  className={`
-                    max-w-[88%] sm:max-w-[75%]
-                    px-3 sm:px-4 py-2.5 sm:py-3
-                    rounded-2xl
-                    text-sm sm:text-base
-                    leading-relaxed
-                    break-words
-                    ${
-                      msg.role === "user"
-                        ? "bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white"
-                        : "bg-white/10 text-white border border-white/15"
-                    }
-                  `}
+                  className={`max-w-[80%] px-4 py-2 rounded-xl ${
+                    msg.role === "user"
+                      ? "bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white"
+                      : "bg-white/10 text-white"
+                  }`}
                 >
                   {msg.text}
-                  {loading &&
-                    i === messages.length - 1 &&
-                    msg.role === "ai" && (
-                      <span className="ml-1 animate-pulse">▋</span>
-                    )}
                 </div>
               </div>
             ))}
           </div>
 
           {/* INPUT */}
-          <div className="
-            border-t border-white/10
-            bg-black/40
-            p-2 sm:p-3
-            flex items-end gap-2
-          ">
-            <textarea
-              ref={textareaRef}
+          <div className="p-3 bg-black/40 border-t border-white/10 flex gap-2">
+
+            <input
               value={input}
-              rows={1}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask your cosmic question..."
-              disabled={loading}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-              className="
-                flex-1 resize-none
-                max-h-[140px]
-                rounded-xl
-                bg-white/10
-                border border-white/15
-                px-3 sm:px-4 py-2
-                text-white
-                placeholder:text-white/50
-                outline-none
-                focus:ring-2 focus:ring-purple-400
-              "
+              className="flex-1 rounded-xl bg-white/10 text-white p-2"
+              placeholder="Ask astrology question..."
             />
 
+            {/* WHATSAPP MIC */}
             <button
-              onClick={sendMessage}
-              disabled={loading}
-              className="
-                px-4 sm:px-5 py-2
-                rounded-xl
-                font-medium
-                bg-gradient-to-r
-                from-indigo-500 via-purple-500 to-pink-500
-                text-white
-                hover:scale-105
-                transition
-              "
+              onClick={startVoice}
+              className={`w-11 h-11 rounded-full text-white
+              ${
+                recording
+                  ? "bg-red-500 animate-pulse"
+                  : "bg-pink-600"
+              }`}
+            >
+              🎤
+            </button>
+
+            <button
+              onClick={() => sendMessage()}
+              className="px-4 rounded-xl bg-indigo-500 text-white"
             >
               Send
             </button>
-          </div>
 
+          </div>
         </div>
       </div>
     </section>
