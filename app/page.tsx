@@ -4,24 +4,67 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ZodiacCarousel from "@/components/ZodiacCarousel";
 import GlowingSection from "@/components/GlowingSection";
+import AIChatAstrologer from "@/components/AIChatAstrologer";
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 export default function Home() {
+  const [cursor, setCursor] = useState({ x: 0, y: 0 });
+
+  /* ===== COSMIC CURSOR ===== */
+  useEffect(() => {
+    const move = (e: MouseEvent) =>
+      setCursor({ x: e.clientX, y: e.clientY });
+
+    window.addEventListener("mousemove", move);
+    return () => window.removeEventListener("mousemove", move);
+  }, []);
+
+  /* ===== SCROLL REVEAL ===== */
+  useEffect(() => {
+    const reveal = () => {
+      const elements = document.querySelectorAll(".reveal");
+
+      elements.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight - 80) {
+          el.classList.add("active");
+        }
+      });
+    };
+
+    reveal();
+    window.addEventListener("scroll", reveal);
+    return () => window.removeEventListener("scroll", reveal);
+  }, []);
+
   return (
-    <>
+    <div className="overflow-x-hidden">
+
+      {/* COSMIC CURSOR */}
+      <div
+        className="cosmic-cursor"
+        style={{ left: cursor.x, top: cursor.y }}
+      />
+
       <Navbar />
 
-      MAIN
-      <main className="relative pt-[72px] bg-gradient-to-br from-sky-50 via-indigo-50 to-pink-50">
+      {/* ================= MAIN ================= */}
+      {/* removed extra top padding (FIXED GAP) */}
+      <main className="relative pt-0 bg-gradient-to-br from-sky-50 via-indigo-50 to-pink-50">
 
-        ZODIAC
-        <GlowingSection className="py-0">
+        {/* ZODIAC HERO */}
+        <GlowingSection className="py-0 reveal">
           <ZodiacCarousel />
         </GlowingSection>
 
+        <GlowingSection className="py-0 reveal">
+          <AIChatAstrologer />
+        </GlowingSection>
+
         {/* ABOUT */}
-        <GlowingSection className="py-0">
+        <GlowingSection className="py-0 reveal">
           <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center gap-8">
 
             <div className="flex-shrink-0 w-full md:w-1/3">
@@ -47,7 +90,7 @@ export default function Home() {
 
               <Link
                 href="/about"
-                className="inline-block bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 rounded-full font-semibold text-white shadow-lg hover:scale-105 transition"
+                className="magnetic inline-block bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 rounded-full font-semibold text-white shadow-lg"
               >
                 Discover More
               </Link>
@@ -55,8 +98,11 @@ export default function Home() {
           </div>
         </GlowingSection>
 
+        {/* DIVIDER */}
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-purple-400/40 to-transparent my-12" />
+
         {/* SERVICES */}
-        <GlowingSection className="py-0">
+        <GlowingSection className="py-0 reveal">
           <div className="max-w-6xl mx-auto px-6 text-center">
 
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500">
@@ -83,7 +129,6 @@ export default function Home() {
                   <h3 className="text-xl font-semibold mb-3 text-gray-800">
                     {service.title}
                   </h3>
-
                   <p className="text-gray-600 text-sm">{service.desc}</p>
                 </div>
               ))}
@@ -94,6 +139,6 @@ export default function Home() {
       </main>
 
       <Footer />
-    </>
+    </div>
   );
 }
