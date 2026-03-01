@@ -12,6 +12,9 @@ export default function AIChatAstrologer() {
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
 
+  const recognitionRef = useRef<any>(null);
+  const finalTranscriptRef = useRef("");
+
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "ai",
@@ -27,28 +30,38 @@ export default function AIChatAstrologer() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
-  /* ===== SPEAK RESPONSE ===== */
+  /* ===== SPEAK RESPONSE (SMART LIMIT) ===== */
   const speak = (text: string) => {
     speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
+    const shortText = text.slice(0, 400); // avoid long speech
+    const utter = new SpeechSynthesisUtterance(shortText);
     utter.lang = "en-US";
     utter.rate = 1;
     speechSynthesis.speak(utter);
   };
 
-  /* ===== LIVE VOICE INPUT (WHATSAPP STYLE) ===== */
+  /* ===== START VOICE (HOLD TO TALK) ===== */
   const startVoice = () => {
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
 
-    if (!SpeechRecognition) return alert("Voice not supported");
+    if (!SpeechRecognition) {
+      alert("Voice not supported");
+      return;
+    }
 
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
     recognition.interimResults = true;
+    recognition.continuous = true;
 
-    recognition.onstart = () => setRecording(true);
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      setRecording(true);
+      finalTranscriptRef.current = "";
+    };
 
     recognition.onresult = (event: any) => {
       let transcript = "";
@@ -57,19 +70,25 @@ export default function AIChatAstrologer() {
         transcript += event.results[i][0].transcript;
       }
 
-      // LIVE typing effect
-      setInput(transcript);
-    };
-
-    recognition.onend = () => {
-      setRecording(false);
-      sendMessage(input);
+      finalTranscriptRef.current = transcript;
+      setInput(transcript); // LIVE typing
     };
 
     recognition.start();
   };
 
-  /* ===== SEND ===== */
+  /* ===== STOP VOICE ===== */
+  const stopVoice = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      setRecording(false);
+
+      const text = finalTranscriptRef.current.trim();
+      if (text) sendMessage(text);
+    }
+  };
+
+  /* ===== SEND MESSAGE ===== */
   const sendMessage = async (voiceText?: string) => {
     const text = (voiceText || input).trim();
     if (!text || loading) return;
@@ -122,7 +141,12 @@ export default function AIChatAstrologer() {
         });
       }
 
-      // AUTO AUDIO REPLY
+      /* CONSULTATION LOGIC */
+      if (fullText.length > 500) {
+        fullText +=
+          "\n\n🔱 For deeper personalized guidance, you may Book Consultation with Pandit Manoj Kumar Mishra.";
+      }
+
       speak(fullText);
     } catch {
       setMessages((prev) => {
@@ -146,8 +170,9 @@ export default function AIChatAstrologer() {
           AI ASTROLOGER
         </h2>
 
-        <div className="rounded-3xl border border-white/10 bg-[#0b1022] overflow-hidden shadow-2xl">
+        <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-[#060b1f] to-[#0d1333] backdrop-blur-xl overflow-hidden shadow-2xl">
 
+          {/* CHAT AREA */}
           <div
             ref={containerRef}
             className="h-[65vh] overflow-y-auto p-4 space-y-3"
@@ -162,7 +187,7 @@ export default function AIChatAstrologer() {
                 }`}
               >
                 <div
-                  className={`max-w-[80%] px-4 py-2 rounded-xl ${
+                  className={`max-w-[80%] px-4 py-2 rounded-xl whitespace-pre-line ${
                     msg.role === "user"
                       ? "bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white"
                       : "bg-white/10 text-white"
@@ -172,23 +197,32 @@ export default function AIChatAstrologer() {
                 </div>
               </div>
             ))}
+
+            {/* ASTRO LOADING */}
+            {loading && (
+              <div className="text-purple-300 text-sm animate-pulse">
+                🪐 Aligning planetary energies... Reading your stars...
+              </div>
+            )}
           </div>
 
-          {/* INPUT */}
+          {/* INPUT BAR */}
           <div className="p-3 bg-black/40 border-t border-white/10 flex gap-2">
 
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              className="flex-1 rounded-xl bg-white/10 text-white p-2"
+              className="flex-1 rounded-xl bg-white/10 text-white p-2 outline-none"
               placeholder="Ask astrology question..."
             />
 
-            {/* WHATSAPP MIC */}
+            {/* HOLD TO TALK MIC */}
             <button
-              onClick={startVoice}
-              className={`w-11 h-11 rounded-full text-white
-              ${
+              onMouseDown={startVoice}
+              onMouseUp={stopVoice}
+              onTouchStart={startVoice}
+              onTouchEnd={stopVoice}
+              className={`w-11 h-11 rounded-full text-white transition ${
                 recording
                   ? "bg-red-500 animate-pulse"
                   : "bg-pink-600"
